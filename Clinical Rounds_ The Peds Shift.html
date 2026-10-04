@@ -1,0 +1,621 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Clinical Rounds: The Peds Shift</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: a night-unit workstation — census board on the left, the open chart on the right; vitals read like a bedside monitor. Committed single dark look. */
+:root{
+  --night:#0e1522; --panel:#162033; --panel-2:#1c2840; --line:#2b3b58;
+  --text:#e6ecf5; --muted:#97a6bf; --lamp:#f0b450; --lamp-ink:#1d1606;
+  --ok:#57d19c; --warn:#ff9f5a; --crit:#ff6b6b;
+  --hr:#5fe08c; --spo2:#5cc8ff; --bp:#ff8a8a; --rr:#f5d76e; --temp:#c9a4ff;
+  --f-display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r:10px;
+  color-scheme:dark;
+}
+html,body{background:var(--night);color:var(--text)}
+body{font-family:var(--f-body);font-size:15px;line-height:1.55;padding-inline:16px;padding-block:0 40px}
+*{box-sizing:border-box}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--lamp);outline-offset:2px}
+
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--night);border-bottom:1px solid var(--line);
+  display:flex;flex-wrap:wrap;align-items:center;gap:12px 24px;padding-block:14px;margin-inline:-16px;padding-inline:16px}
+.brand{display:flex;flex-direction:column;gap:0;min-width:0}
+.brand small{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.brand h1{font-family:var(--f-display);font-weight:700;font-size:clamp(20px,3.2vw,28px);margin:0;line-height:1.1;text-wrap:balance}
+.brand h1 span{color:var(--lamp)}
+.hud{display:flex;gap:18px;margin-left:auto;flex-wrap:wrap}
+.hud div{display:flex;flex-direction:column}
+.hud label{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.hud b{font-family:var(--f-mono);font-size:20px;font-variant-numeric:tabular-nums;font-weight:600}
+.hud .clock b{color:var(--lamp)}
+
+.wrap{display:grid;grid-template-columns:270px minmax(0,1fr);gap:20px;max-width:1180px;margin:20px auto 0}
+@media (max-width:820px){.wrap{grid-template-columns:minmax(0,1fr)}}
+
+/* Census */
+.census{display:flex;flex-direction:column;gap:8px;align-self:start;position:sticky;top:calc(env(safe-area-inset-top,0px) + 86px)}
+.census h2{font-family:var(--f-display);font-size:14px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 4px;font-weight:500}
+.census p.hint{margin:0 0 6px;color:var(--muted);font-size:13px}
+.rooms{display:flex;flex-direction:column;gap:6px}
+@media (max-width:820px){
+  .census{position:static}
+  .rooms{flex-direction:row;overflow-x:auto;padding-bottom:6px;scroll-snap-type:x mandatory}
+  .room{min-width:190px;scroll-snap-align:start}
+}
+.room{display:grid;grid-template-columns:40px minmax(0,1fr) auto;align-items:center;gap:10px;text-align:left;
+  background:transparent;border:1px solid var(--line);border-radius:var(--r);padding:9px 10px;cursor:pointer}
+.room:hover{background:var(--panel)}
+.room[aria-current="true"]{background:var(--panel-2);border-color:var(--lamp)}
+.room .num{font-family:var(--f-mono);font-weight:600;color:var(--lamp);font-size:13px}
+.room .who{min-width:0}
+.room .who b{display:block;font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.room .who span{display:block;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dot{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--muted)}
+.dot.prog{border-color:var(--lamp);background:transparent;box-shadow:inset 0 0 0 2px var(--night),inset 0 0 0 6px var(--lamp)}
+.dot.s3{background:var(--ok);border-color:var(--ok)}
+.dot.s2{background:var(--lamp);border-color:var(--lamp)}
+.dot.s1,.dot.s0{background:var(--crit);border-color:var(--crit)}
+.reportbtn{margin-top:8px;background:var(--lamp);color:var(--lamp-ink);border:0;border-radius:var(--r);padding:10px 12px;font-weight:600;cursor:pointer}
+.reportbtn:disabled{background:var(--panel-2);color:var(--muted);cursor:not-allowed}
+
+/* Chart */
+.chart{min-width:0;display:flex;flex-direction:column;gap:16px}
+.pt-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 16px}
+.pt-head .rm{font-family:var(--f-mono);color:var(--lamp);font-size:14px;letter-spacing:.06em}
+.pt-head h2{font-family:var(--f-display);font-size:clamp(24px,3.6vw,34px);margin:0;line-height:1.1;font-weight:700;text-wrap:balance}
+.pt-head .dx{color:var(--muted);flex-basis:100%;font-size:15px}
+
+.monitor{background:#060a12;border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;
+  display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px 14px}
+@media (max-width:620px){.monitor{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.vital label{display:block;font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;opacity:.85}
+.vital b{display:block;font-family:var(--f-mono);font-size:clamp(20px,3vw,28px);font-weight:600;font-variant-numeric:tabular-nums;line-height:1.15}
+.vital small{font-family:var(--f-mono);font-size:11px;opacity:.75}
+.v-hr{color:var(--hr)} .v-bp{color:var(--bp)} .v-spo2{color:var(--spo2)} .v-rr{color:var(--rr)} .v-t{color:var(--temp)}
+
+.grid2{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px}
+@media (max-width:700px){.grid2{grid-template-columns:minmax(0,1fr)}}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;min-width:0}
+.box h3{margin:0 0 8px;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.sbar{display:grid;grid-template-columns:22px minmax(0,1fr);gap:4px 10px;margin:0}
+.sbar dt{font-family:var(--f-mono);font-weight:600;color:var(--lamp)}
+.sbar dd{margin:0 0 6px}
+.labs{width:100%;border-collapse:collapse;font-size:14px}
+.labs td{padding:4px 0;border-bottom:1px solid var(--line)}
+.labs td:last-child{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.labs tr.flag td:last-child{color:var(--warn);font-weight:600}
+.labs tr.flag td:last-child::after{content:" ▲"}
+.labs tr.flag.lo td:last-child::after{content:" ▼"}
+.meds{margin:10px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px;font-size:14px}
+.meds li{padding-left:14px;position:relative}
+.meds li::before{content:"";position:absolute;left:0;top:.62em;width:6px;height:6px;border-radius:1px;background:var(--muted)}
+
+/* Stability */
+.stab{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.stab .bar{flex:1 1 220px;height:12px;border-radius:6px;background:var(--panel-2);border:1px solid var(--line);overflow:hidden}
+.stab .fill{height:100%;border-radius:6px;transition:width .6s ease,background-color .6s ease}
+.stab .lbl{font-family:var(--f-mono);font-size:13px;font-variant-numeric:tabular-nums;min-width:4ch}
+.pill{display:inline-block;font-size:12px;font-weight:600;letter-spacing:.04em;padding:3px 10px;border-radius:999px;border:1px solid currentColor}
+.pill.ok{color:var(--ok)} .pill.warn{color:var(--warn)} .pill.crit{color:var(--crit)} .pill.mute{color:var(--muted)}
+
+/* Questions */
+.q{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.q .meta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+.q .tag{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--lamp);font-weight:600}
+.q .step{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.q .time{font-family:var(--f-mono);font-size:12px;color:var(--muted);margin-left:auto}
+.q p.stem{margin:0 0 12px;font-size:16px;max-width:68ch}
+.opts{display:flex;flex-direction:column;gap:8px}
+.opt{display:grid;grid-template-columns:26px minmax(0,1fr);gap:10px;align-items:start;text-align:left;cursor:pointer;
+  background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.opt:hover:not(:disabled){border-color:var(--lamp)}
+.opt:disabled{cursor:default}
+.opt .k{font-family:var(--f-mono);font-weight:600;width:24px;height:24px;border-radius:6px;display:grid;place-items:center;border:1px solid var(--line);font-size:13px}
+.opt.right{border-color:var(--ok)} .opt.right .k{background:var(--ok);color:var(--night);border-color:var(--ok)}
+.opt.wrong{border-color:var(--crit)} .opt.wrong .k{background:var(--crit);color:var(--night);border-color:var(--crit)}
+.opt.dim{opacity:.55}
+.why{margin-top:12px;border-top:1px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:8px}
+.why p{margin:0;max-width:72ch}
+.why .verdict{font-weight:600}
+.why .verdict.ok{color:var(--ok)} .why .verdict.bad{color:var(--crit)}
+.done-q{opacity:.82}
+.actions{display:flex;gap:10px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--panel-2);border-radius:8px;padding:9px 14px;cursor:pointer;font-weight:500}
+.btn.primary{background:var(--lamp);color:var(--lamp-ink);border-color:var(--lamp);font-weight:600}
+.btn:hover{filter:brightness(1.08)}
+
+.outcome{display:flex;flex-direction:column;gap:6px;border-left:3px solid var(--line);padding:4px 0 4px 14px}
+.outcome.ok{border-color:var(--ok)} .outcome.warn{border-color:var(--warn)} .outcome.crit{border-color:var(--crit)}
+.outcome h3{margin:0;font-family:var(--f-display);font-size:20px}
+.outcome p{margin:0;color:var(--muted);max-width:70ch}
+
+/* Report */
+.report h2{font-family:var(--f-display);font-size:clamp(26px,4vw,36px);margin:0}
+.report .sub{color:var(--muted);margin:4px 0 0}
+.cats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media (max-width:620px){.cats{grid-template-columns:minmax(0,1fr)}}
+.cat b{font-family:var(--f-mono);font-size:28px;font-variant-numeric:tabular-nums;display:block}
+.cat span{color:var(--muted);font-size:13px}
+.tbl-wrap{overflow-x:auto}
+.rtbl{width:100%;border-collapse:collapse;font-size:14px;min-width:520px}
+.rtbl th{text-align:left;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line)}
+.rtbl td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+.rtbl td.n{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.review{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.field{display:flex;flex-direction:column;gap:4px;max-width:360px}
+.field label{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.field input{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:9px 10px;color:var(--text);font:inherit}
+textarea.copytext{width:100%;min-height:180px;background:#060a12;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:10px;font-family:var(--f-mono);font-size:12.5px}
+.note{color:var(--muted);font-size:13px;max-width:75ch}
+.toast{font-size:13px;color:var(--ok)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<header class="top">
+  <div class="brand"><small>Peds 3 North · Night shift</small><h1>Clinical Rounds: <span>The Peds Shift</span></h1></div>
+  <div class="hud">
+    <div class="clock"><label>Unit clock</label><b id="clock">19:00</b></div>
+    <div><label>Patients seen</label><b id="seen">0/10</b></div>
+    <div><label>Score</label><b id="score">0/30</b></div>
+  </div>
+</header>
+
+<div class="wrap">
+  <aside class="census" aria-label="Unit census">
+    <h2>Census</h2>
+    <p class="hint">Ten children on Peds 3 North, newborn to age 12. Three decisions each; finish all ten for your end-of-shift report.</p>
+    <div class="rooms" id="rooms"></div>
+    <button class="reportbtn" id="reportBtn" disabled>End-of-shift report</button>
+    <button class="btn" id="resetBtn" style="margin-top:2px">Start a new shift</button>
+  </aside>
+  <main class="chart" id="chart" aria-live="polite"></main>
+</div>
+
+<script>
+const CASES = [
+{id:"301",unit:"Peds 3 North",name:"Lucas Moreno",age:"2 yr",sex:"M",dx:"Croup (laryngotracheobronchitis)",
+ s:"Barking cough and noisy breathing that woke him at 2000.",
+ b:"Cold symptoms for 2 days. Weight 13 kg. Immunizations up to date.",
+ a:"Seal-like barking cough, hoarse cry, inspiratory stridor at rest, suprasternal retractions. Drinking from a sippy cup.",
+ r:"Dexamethasone given PO at 2030. Racemic epinephrine neb given at 2100; stridor at rest has resolved.",
+ mon:[["HR","142","sinus tach","hr"],["SpO₂","95%","room air","spo2"],["RR","38","/min","rr"],["TEMP","38.0","°C","temp"],["WT","13","kg","bp"]],
+ labs:[["Respiratory viral panel","parainfluenza positive","hi"],["Neck X-ray","steeple sign","hi"]],
+ meds:["Dexamethasone 0.6 mg/kg PO x1 (given)","Racemic epinephrine 2.25% 0.5 mL neb PRN stridor at rest","Acetaminophen 15 mg/kg PO q6h PRN"],
+ qs:[
+  {cat:"Pathophysiology",topic:"Subglottic narrowing and inspiratory stridor",
+   stem:"Why does croup cause inspiratory stridor in a toddler?",
+   o:["Spasm of the lower bronchioles traps air on exhalation.",
+      "Viral inflammation swells the subglottic area, the narrowest part of a young child's airway, so air rushing in becomes turbulent.",
+      "Fluid in the alveoli makes a high-pitched sound.",
+      "The epiglottis is infected and swollen."],
+   c:1,why:"In young children the cricoid (subglottic) region is the narrowest part of the airway, and resistance rises steeply as its radius shrinks. Edema there narrows the extrathoracic airway, which collapses further during inspiration and produces inspiratory stridor and a barky cough."},
+  {cat:"Pharmacology",topic:"Racemic epinephrine rebound and observation",
+   stem:"Stridor has resolved after racemic epinephrine. His mother wants to take him home now. What do you explain?",
+   o:["\"He can go now; the medicine cured the swelling.\"",
+      "\"The epinephrine wears off in about 2 hours and the swelling can come back, so we need to watch him for at least 2 to 3 hours.\"",
+      "\"He needs a second dose of dexamethasone before he can leave.\"",
+      "\"He has to stay until his cough is completely gone.\""],
+   c:1,why:"Racemic epinephrine shrinks swollen mucosa through vasoconstriction within minutes, but the effect lasts only 1 to 2 hours, and stridor can return. Children are observed for 2 to 4 hours afterward. Dexamethasone reduces inflammation over the following hours, and the cough itself can last several days."},
+  {cat:"Prioritization & Safety",topic:"Epiglottitis versus croup",
+   stem:"Which presentation would make you suspect epiglottitis instead of croup and change your approach?",
+   o:["Gradual onset, barky cough and low-grade fever",
+      "Sudden high fever, drooling, tripod positioning, muffled voice and no barky cough",
+      "Runny nose and a hoarse voice",
+      "Stridor only while crying"],
+   c:1,why:"Epiglottitis comes on suddenly with high fever, drooling, dysphagia, a muffled \"hot potato\" voice and tripod positioning. It can obstruct the airway completely. Don't examine the throat with a tongue blade, keep the child calm and upright with the parent, and call for airway experts immediately."}
+ ]},
+{id:"302",unit:"Peds 3 North",name:"Amara Okoye",age:"12 yr",sex:"F",dx:"Severe asthma exacerbation",
+ s:"Can't stop coughing and \"can't get air in\" despite her rescue inhaler.",
+ b:"Persistent asthma; ran out of her controller inhaler a month ago. Two ED visits this year. Weight 40 kg.",
+ a:"Speaks in short phrases, sitting forward, intercostal retractions, diffuse expiratory wheezes, prolonged expiration.",
+ r:"Three albuterol/ipratropium nebs given in the ED. Systemic steroid ordered. Blood gas at 0100.",
+ mon:[["HR","132","sinus tach","hr"],["SpO₂","90%","2 L NC","spo2"],["RR","34","/min","rr"],["BP","118/72","mmHg","bp"],["TEMP","37.1","°C","temp"]],
+ labs:[["pH (venous)","7.36",""],["PCO₂ (venous)","46 mmHg","hi"],["Peak flow","42% of personal best","lo"],["Potassium","3.4 mEq/L","lo"]],
+ meds:["Albuterol 5 mg neb q1h","Ipratropium 0.5 mg neb q20min x3 (completed)","Methylprednisolone 1 mg/kg IV q12h","Magnesium sulfate 50 mg/kg IV x1 (ordered)"],
+ qs:[
+  {cat:"Pathophysiology",topic:"Three processes that obstruct airflow in asthma",
+   stem:"Which processes narrow Amara's airways during this exacerbation?",
+   o:["Alveolar collapse and surfactant loss",
+      "Bronchial smooth-muscle spasm, mucosal edema from inflammation, and mucus plugging",
+      "Fluid overload from IV fluids",
+      "Destruction of alveolar walls"],
+   c:1,why:"Asthma combines bronchospasm, inflammatory swelling of the airway wall, and thick mucus plugs. Air gets in but struggles to get out, so air traps and expiration lengthens. Bronchodilators treat the spasm; corticosteroids treat the inflammation."},
+  {cat:"Pharmacology",topic:"Systemic corticosteroids in asthma",
+   stem:"Which statement about her IV methylprednisolone is accurate?",
+   o:["It opens the airways within minutes, so she won't need more albuterol.",
+      "It reduces airway inflammation, but its effect builds over 4 to 6 hours, so bronchodilators must continue.",
+      "It should be held until her breathing improves.",
+      "It's given only to children with pneumonia."],
+   c:1,why:"Corticosteroids reduce inflammation and make beta receptors more responsive to albuterol. Giving them early lowers admission and relapse rates, but they take hours to work, so bronchodilators continue in the meantime. Watch for hyperglycemia."},
+  {cat:"Prioritization & Safety",topic:"Signs of impending respiratory failure in asthma",
+   stem:"At 0200 which change is most concerning?",
+   o:["Wheezes are louder.",
+      "She's quieter, wheezes are fading, she's drowsy, and PCO₂ has risen to 52.",
+      "Heart rate is 140 after albuterol.",
+      "She's asking for water."],
+   c:1,why:"A child in severe asthma should be blowing off CO₂ and running a low PCO₂. A normal or rising PCO₂ means she's tiring. Fading wheezes with less air movement (a \"silent chest\") and drowsiness signal impending respiratory failure. Call rapid response now. Tachycardia after albuterol is expected."}
+ ]},
+{id:"303",unit:"Peds 3 North",name:"Olivia Park",age:"8 yr",sex:"F",dx:"New-onset type 1 diabetes with DKA",
+ s:"Weeks of thirst and wetting the bed again; vomiting today.",
+ b:"No prior history. Weight down 2 kg this month. Now 25 kg. Admitted at 2000.",
+ a:"At 0100, after 4 hours of treatment: new headache, irritable, harder to wake, heart rate dropped from 120 to 64.",
+ r:"Insulin infusion at 0.1 units/kg/h, fluids per pediatric DKA protocol. Neuro checks hourly.",
+ mon:[["HR","64","sinus brady","hr"],["BP","132/88","mmHg (was 104/62)","bp"],["SpO₂","98%","room air","spo2"],["RR","14","/min, irregular","rr"],["GCS","12","was 15","temp"]],
+ labs:[["Glucose","288 mg/dL (was 610)","hi"],["pH","7.18","lo"],["Sodium","131 mEq/L, falling","lo"],["Bicarbonate","10 mEq/L","lo"],["Potassium","4.1 mEq/L",""]],
+ meds:["Regular insulin 0.1 units/kg/h IV (no bolus)","0.9% NaCl with potassium per protocol","Mannitol 0.5–1 g/kg IV PRN (ordered)","3% saline PRN (ordered)"],
+ qs:[
+  {cat:"Pathophysiology",topic:"Polyuria and polydipsia in new-onset diabetes",
+   stem:"Why has Olivia been so thirsty and wetting the bed?",
+   o:["She has a urinary tract infection.",
+      "Glucose above the kidneys' threshold spills into the urine and pulls water with it (osmotic diuresis), so she loses fluid and gets thirsty.",
+      "Insulin makes the kidneys produce more urine.",
+      "Ketones irritate the bladder."],
+   c:1,why:"Without insulin, blood glucose rises above the renal threshold of about 180 mg/dL. Glucose in the tubules draws water osmotically, causing polyuria, dehydration and thirst. Weight loss comes from fluid loss and from breaking down fat and muscle for fuel."},
+  {cat:"Prioritization & Safety",topic:"Recognizing cerebral edema in pediatric DKA",
+   stem:"Headache, falling heart rate, rising BP, irregular breathing and lower GCS. What is the priority?",
+   o:["Give acetaminophen for the headache and recheck in an hour.",
+      "Treat it as cerebral edema: call the provider and rapid response now, raise the head of the bed, and prepare mannitol or 3% saline.",
+      "Increase the IV fluid rate.",
+      "Stop the insulin and give dextrose."],
+   c:1,why:"Cerebral edema is the leading cause of death in pediatric DKA, usually 4 to 12 hours into treatment. Headache, altered consciousness, bradycardia, hypertension and irregular breathing (Cushing's triad) indicate rising intracranial pressure. It needs immediate treatment with mannitol or hypertonic saline, head elevation, and a reduced fluid rate."},
+  {cat:"Pharmacology",topic:"No insulin bolus in pediatric DKA",
+   stem:"Why does the pediatric DKA protocol start insulin without a bolus?",
+   o:["Boluses don't work in children.",
+      "A bolus drops glucose and osmolality too quickly, which increases the risk of cerebral edema and hypokalemia.",
+      "Children need more insulin than adults.",
+      "Insulin can only be given subcutaneously in children."],
+   c:1,why:"Pediatric guidelines start a continuous infusion of about 0.05 to 0.1 units/kg/h without a bolus. Rapid falls in glucose and serum osmolality are linked to fluid shifting into brain cells. A falling sodium during treatment is another warning sign."}
+ ]},
+{id:"304",unit:"Peds 3 North",name:"Isabella Grant",age:"8 mo",sex:"F",dx:"Suspected bacterial meningitis",
+ s:"High fever and won't stop crying; \"screams when I pick her up.\"",
+ b:"Missed her 6-month vaccines. Older sibling in daycare. Weight 8 kg.",
+ a:"Bulging anterior fontanelle, high-pitched cry, irritable when held (paradoxical irritability), poor feeding. A few petechiae on her trunk.",
+ r:"Lumbar puncture done. Blood cultures drawn. First antibiotics due now.",
+ mon:[["HR","172","sinus tach","hr"],["BP","88/50","mmHg","bp"],["SpO₂","97%","room air","spo2"],["RR","42","/min","rr"],["TEMP","39.6","°C","temp"]],
+ labs:[["CSF WBC","2,400 /µL, neutrophils","hi"],["CSF glucose","22 mg/dL","lo"],["CSF protein","180 mg/dL","hi"],["CSF Gram stain","gram-negative diplococci","hi"],["Platelets","96 ×10³/µL","lo"]],
+ meds:["Ceftriaxone 100 mg/kg IV","Vancomycin 15 mg/kg IV q6h","Dexamethasone 0.15 mg/kg IV (with first antibiotic dose)","Acetaminophen 15 mg/kg PRN"],
+ qs:[
+  {cat:"Pathophysiology",topic:"Increased ICP in infants with meningitis",
+   stem:"Why is Isabella's fontanelle bulging?",
+   o:["She is dehydrated.",
+      "Inflammation and purulent exudate in the meninges raise intracranial pressure, and an infant's open fontanelle shows it.",
+      "It's a normal finding while crying.",
+      "She has a skull fracture."],
+   c:1,why:"Bacterial meningitis inflames the meninges and fills the subarachnoid space with exudate, which blocks CSF flow and causes cerebral edema. An infant's open fontanelle bulges as intracranial pressure rises. A sunken fontanelle suggests dehydration. Assess it with the infant calm and upright, because crying makes it bulge briefly."},
+  {cat:"Prioritization & Safety",topic:"Meningitis: precautions and timely antibiotics",
+   stem:"Which plan is correct right now?",
+   o:["Standard precautions only; give antibiotics after the culture results.",
+      "Droplet precautions, and give the antibiotics now without waiting for culture results.",
+      "Airborne precautions in a negative-pressure room; antibiotics in the morning.",
+      "Contact precautions; hold antibiotics until the CSF culture grows."],
+   c:1,why:"Gram-negative diplococci suggest Neisseria meningitidis, which spreads by respiratory droplets. Droplet precautions continue until 24 hours of effective antibiotics. Antibiotics must not be delayed. Close contacts may need prophylaxis."},
+  {cat:"Prioritization & Safety",topic:"Meningococcemia: spreading purpura",
+   stem:"At 0200 the petechiae have spread to her legs and are becoming purple and blotchy. Her extremities are cool. What does this suggest?",
+   o:["An allergic reaction to ceftriaxone",
+      "Meningococcemia with septic shock and possible DIC; this needs immediate escalation",
+      "A normal viral rash",
+      "Bruising from the blood draw"],
+   c:1,why:"A rapidly spreading petechial or purpuric rash with poor perfusion signals meningococcal sepsis, which can progress to DIC and shock within hours. Falling platelets support this. Call rapid response, prepare fluid resuscitation and vasopressors, and expect transfer to the PICU."}
+ ]},
+{id:"305",unit:"Peds 3 North",name:"Henry Walsh",age:"9 mo",sex:"M",dx:"Suspected intussusception",
+ s:"Episodes of sudden screaming with knees drawn up, then very sleepy between them.",
+ b:"Viral illness last week. Weight 9 kg. Air enema scheduled in radiology at 0100.",
+ a:"Sausage-shaped mass in the right upper quadrant. Vomiting twice. One stool mixed with blood and mucus.",
+ r:"NPO, IV fluids running. Waiting for transport to radiology.",
+ mon:[["HR","156","sinus tach","hr"],["BP","90/56","mmHg","bp"],["SpO₂","99%","room air","spo2"],["RR","34","/min","rr"],["TEMP","37.6","°C","temp"]],
+ labs:[["Ultrasound","target sign, ileocolic","hi"],["Sodium","135 mEq/L",""],["WBC","13.1 ×10³/µL","hi"]],
+ meds:["NPO","0.9% NaCl 20 mL/kg bolus, then maintenance","Morphine 0.05 mg/kg IV PRN pain"],
+ qs:[
+  {cat:"Pathophysiology",topic:"Intussusception and currant-jelly stool",
+   stem:"What causes the bloody, mucus-filled stool?",
+   o:["A bacterial infection of the colon",
+      "A segment of bowel telescopes into the next, compressing its blood supply; venous congestion makes the mucosa bleed and secrete mucus.",
+      "Swallowed blood from a nosebleed",
+      "Hemorrhoids from straining"],
+   c:1,why:"In intussusception, usually ileum into colon, the trapped segment's mesentery is compressed. Venous and lymphatic congestion cause edema, bleeding and mucus (the \"currant-jelly\" stool, often a late sign). Without reduction, arterial supply is cut off, leading to necrosis and perforation."},
+  {cat:"Prioritization & Safety",topic:"Spontaneous reduction of intussusception",
+   stem:"Before transport, Henry passes a normal brown stool and is playful and calm. What do you do?",
+   o:["Proceed with the air enema as scheduled without mentioning it.",
+      "Report the normal stool and his improvement to the provider right away; the intussusception may have reduced on its own.",
+      "Start feeding him now.",
+      "Give a laxative to clear the rest."],
+   c:1,why:"A normal stool and a return to comfort can mean the intussusception reduced spontaneously. The provider needs to know immediately, because it may change the plan for imaging or the enema. Keep him NPO until the provider decides."},
+  {cat:"Prioritization & Safety",topic:"Perforation after enema reduction",
+   stem:"After the air enema, which finding needs immediate action?",
+   o:["Passing a normal stool",
+      "A rigid, distended abdomen with sudden pallor, rising heart rate and fever",
+      "Sleeping comfortably",
+      "Asking for his bottle"],
+   c:1,why:"Perforation is the main complication of enema reduction. A tense or rigid abdomen, signs of shock, or fever needs urgent surgical evaluation. Recurrence can also occur, most often in the first 24 hours, so return of colicky pain should be reported."}
+ ]},
+{id:"306",unit:"Peds 3 North",name:"Liam O'Connor",age:"5 wk",sex:"M",dx:"Hypertrophic pyloric stenosis",
+ s:"Forceful vomiting after every feed for 5 days; \"he's always hungry.\"",
+ b:"Firstborn male, formula-fed. Weight 3.9 kg, below his birth weight of 4.1 kg.",
+ a:"Projectile, non-bilious vomiting shortly after feeds. Olive-shaped mass in the epigastrium. Visible gastric peristalsis. Sunken fontanelle, few wet diapers.",
+ r:"Ultrasound confirmed. Surgeon wants pyloromyotomy as soon as possible.",
+ mon:[["HR","168","sinus tach","hr"],["BP","74/42","mmHg","bp"],["SpO₂","98%","room air","spo2"],["RR","32","/min, shallow","rr"],["TEMP","36.9","°C","temp"]],
+ labs:[["Chloride","88 mEq/L","lo"],["Bicarbonate","34 mEq/L","hi"],["Potassium","3.2 mEq/L","lo"],["pH","7.51","hi"],["Pyloric muscle thickness","5 mm","hi"]],
+ meds:["NPO","D5 0.45% NaCl with KCl 20 mEq/L after voiding","Pyloromyotomy pending"],
+ qs:[
+  {cat:"Pathophysiology",topic:"Hypochloremic metabolic alkalosis from vomiting",
+   stem:"Why does Liam have a high bicarbonate and low chloride?",
+   o:["Diarrhea has removed bicarbonate.",
+      "Repeated vomiting of stomach acid (HCl) loses hydrogen and chloride ions, producing hypochloremic metabolic alkalosis.",
+      "He is breathing too fast.",
+      "Formula contains too much bicarbonate."],
+   c:1,why:"The thickened pylorus blocks gastric emptying, so he vomits pure gastric contents rich in HCl. Losing hydrogen ions raises bicarbonate, and losing chloride lets the kidneys hold onto bicarbonate. Dehydration and potassium loss make the alkalosis harder to correct. Shallow breathing is respiratory compensation."},
+  {cat:"Prioritization & Safety",topic:"Correct alkalosis before pyloromyotomy",
+   stem:"The surgeon asks whether Liam can go to the OR now. What is the right answer?",
+   o:["Yes; surgery is the only treatment, so speed matters most.",
+      "Not yet; he needs rehydration and correction of the alkalosis and potassium first.",
+      "Yes, as long as he has an IV.",
+      "No; he needs to feed well first."],
+   c:1,why:"Pyloric stenosis is not a surgical emergency, but its fluid and electrolyte problems are a medical priority. Metabolic alkalosis increases the risk of post-anesthesia apnea because it depresses the respiratory drive. Surgery waits until fluids, chloride, bicarbonate and potassium are corrected."},
+  {cat:"Prioritization & Safety",topic:"Post-pyloromyotomy feeding",
+   stem:"After surgery his parents are alarmed when he spits up part of a feed. What do you tell them?",
+   o:["\"The surgery failed and he'll need another one.\"",
+      "\"A little vomiting is common in the first day or two while the stomach adjusts; we start with small feeds and increase them.\"",
+      "\"He should stay NPO for a week.\"",
+      "\"Spitting up means he's allergic to formula.\""],
+   c:1,why:"Feeds usually start within a few hours after pyloromyotomy and advance as tolerated. Some vomiting in the first 24 to 48 hours is common because of edema at the surgical site. Persistent projectile vomiting, fever or a red, draining incision should be reported."}
+ ]},
+{id:"307",unit:"Peds 3 North",name:"Mia Tanaka",age:"3 yr",sex:"F",dx:"Kawasaki disease",
+ s:"Fever for 6 days that won't come down with acetaminophen.",
+ b:"Previously healthy. Weight 14 kg. Echocardiogram tomorrow morning.",
+ a:"Bilateral red eyes without discharge, red cracked lips, strawberry tongue, swollen red hands and feet, polymorphous rash, one large cervical lymph node. Very irritable.",
+ r:"IVIG infusion starting at 2200. High-dose aspirin started.",
+ mon:[["HR","148","sinus tach","hr"],["BP","96/58","mmHg","bp"],["SpO₂","98%","room air","spo2"],["RR","28","/min","rr"],["TEMP","39.4","°C","temp"]],
+ labs:[["CRP","12.4 mg/dL","hi"],["ESR","88 mm/h","hi"],["Platelets","480 ×10³/µL","hi"],["Albumin","2.9 g/dL","lo"],["ALT","72 U/L","hi"]],
+ meds:["IVIG 2 g/kg IV over 10–12 h","Aspirin 20–25 mg/kg PO q6h (high dose)","Acetaminophen PRN"],
+ qs:[
+  {cat:"Pathophysiology",topic:"Kawasaki disease and coronary aneurysms",
+   stem:"What is the most serious risk of Kawasaki disease?",
+   o:["Permanent hearing loss",
+      "Inflammation of medium-sized arteries that can weaken the coronary arteries and form aneurysms",
+      "Kidney failure",
+      "Spread of infection to her classmates"],
+   c:1,why:"Kawasaki disease is an acute vasculitis of medium-sized arteries, with a strong preference for the coronary arteries. Without treatment about a quarter of children develop coronary aneurysms, which can lead to thrombosis and myocardial infarction. Treating within 10 days of fever onset sharply lowers that risk. It isn't contagious."},
+  {cat:"Pharmacology",topic:"IVIG infusion monitoring",
+   stem:"What should you monitor during the IVIG infusion?",
+   o:["Blood glucose every hour",
+      "Vital signs closely, especially early in the infusion, for fever, chills, hypotension or signs of anaphylaxis, and for fluid overload",
+      "Nothing; IVIG has no side effects",
+      "Urine ketones"],
+   c:1,why:"IVIG reduces the inflammation in the vessel walls. Infusion reactions such as chills, fever, flushing, hypotension and rarely anaphylaxis occur most often early or when the rate is increased, so vitals are checked often and the rate is titrated per protocol. The large volume can cause fluid overload in children with myocarditis."},
+  {cat:"Pharmacology",topic:"Kawasaki discharge teaching: vaccines and aspirin",
+   stem:"Which statement shows her parents understand the discharge teaching?",
+   o:["\"She can get her MMR vaccine next week as planned.\"",
+      "\"We'll delay live vaccines like MMR and varicella for about 11 months, and call if she's exposed to flu or chickenpox while on aspirin.\"",
+      "\"We can stop the aspirin as soon as her fever is gone.\"",
+      "\"She can take ibuprofen with her aspirin for pain.\""],
+   c:1,why:"IVIG contains antibodies that can block the response to live vaccines, so MMR and varicella are delayed about 11 months. Aspirin continues at a low antiplatelet dose for weeks. Influenza or varicella while on aspirin raises the risk of Reye syndrome, so she should get the inactivated flu vaccine. Ibuprofen can interfere with aspirin's antiplatelet effect."}
+ ]},
+{id:"308",unit:"Peds 3 North",name:"Ben Adeyemi",age:"4 yr",sex:"M",dx:"Nephrotic syndrome (likely minimal change disease)",
+ s:"Puffy eyes every morning and his pants don't fit.",
+ b:"Previously healthy. Weight 19.5 kg, up from 17 kg two weeks ago.",
+ a:"Periorbital and scrotal edema, distended abdomen with a fluid wave, frothy urine. Normal blood pressure, no visible blood in urine.",
+ r:"Prednisone started today. Daily weights and abdominal girth ordered.",
+ mon:[["HR","104","sinus","hr"],["BP","98/60","mmHg","bp"],["SpO₂","98%","room air","spo2"],["RR","24","/min","rr"],["TEMP","36.8","°C","temp"]],
+ labs:[["Urine protein","4+ (protein:creatinine 6.2)","hi"],["Albumin","1.6 g/dL","lo"],["Cholesterol","390 mg/dL","hi"],["Creatinine","0.3 mg/dL",""],["Urine RBC","none",""]],
+ meds:["Prednisone 2 mg/kg/day PO","No-added-salt diet","Furosemide IV with albumin PRN (provider)","Pneumococcal vaccine status to review"],
+ qs:[
+  {cat:"Pathophysiology",topic:"Proteinuria, hypoalbuminemia and edema",
+   stem:"How does nephrotic syndrome cause Ben's edema?",
+   o:["His heart is failing to pump the extra fluid.",
+      "Leaky glomeruli lose large amounts of protein; low serum albumin lowers oncotic pressure, so fluid moves into the tissues.",
+      "His kidneys have stopped making urine.",
+      "High blood pressure forces fluid out of his vessels."],
+   c:1,why:"Damage to the glomerular filtration barrier lets albumin escape into the urine. Low serum albumin reduces plasma oncotic pressure, so fluid shifts into the interstitium (periorbital, scrotal and abdominal edema). The liver responds by making more lipoproteins, raising cholesterol."},
+  {cat:"Pharmacology",topic:"Corticosteroid therapy and infection risk",
+   stem:"Ben starts high-dose prednisone. Which issue is the priority to monitor?",
+   o:["Weight loss",
+      "Infection, including peritonitis and cellulitis, because both the disease and the steroid weaken his defenses",
+      "Low blood glucose",
+      "Hair loss"],
+   c:1,why:"Children with nephrotic syndrome lose immunoglobulins in the urine, and corticosteroids suppress the immune response. Serious bacterial infections such as spontaneous peritonitis and cellulitis are a leading complication. Fever or abdominal pain must be reported. Steroids also raise glucose and blood pressure and must be tapered, not stopped suddenly."},
+  {cat:"Prioritization & Safety",topic:"Nephrotic syndrome versus acute glomerulonephritis",
+   stem:"A classmate asks how this differs from post-streptococcal glomerulonephritis. Which comparison is correct?",
+   o:["They look the same; both cause massive proteinuria and normal blood pressure.",
+      "Nephrotic syndrome shows massive proteinuria, very low albumin and heavy edema; glomerulonephritis shows tea-colored urine with hematuria, hypertension and milder edema.",
+      "Glomerulonephritis causes high cholesterol.",
+      "Only nephrotic syndrome follows a strep infection."],
+   c:1,why:"Nephrotic syndrome is a protein leak: heavy proteinuria, hypoalbuminemia, hyperlipidemia and marked edema, usually with normal blood pressure. Acute post-streptococcal glomerulonephritis is inflammatory: hematuria (cola-colored urine), hypertension, reduced urine output and mild periorbital edema, often 1 to 3 weeks after a strep infection."}
+ ]},
+{id:"309",unit:"Peds 3 North",name:"Zoe Fitzgerald",age:"10 mo",sex:"F",dx:"Unrepaired tetralogy of Fallot",
+ s:"Turned blue and started breathing very fast while crying after her blood draw.",
+ b:"Repair planned for next month. On propranolol at home. Weight 8.5 kg.",
+ a:"Deeply cyanotic lips and nail beds, rapid deep breathing, inconsolable crying. Harsh systolic murmur is now softer.",
+ r:"Spell started 2 minutes ago. Oxygen and emergency medications at the bedside.",
+ mon:[["HR","176","sinus tach","hr"],["SpO₂","62%","room air","spo2"],["RR","64","/min, deep","rr"],["BP","78/44","mmHg","bp"],["TEMP","37.0","°C","temp"]],
+ labs:[["Hemoglobin","17.2 g/dL","hi"],["Hematocrit","52%","hi"],["Baseline SpO₂","84%",""]],
+ meds:["Oxygen","Morphine 0.1 mg/kg IV/IM/subcut PRN hypercyanotic spell","0.9% NaCl 10 mL/kg bolus PRN","Phenylephrine IV PRN (ordered)","Propranolol PO (home)"],
+ qs:[
+  {cat:"Pathophysiology",topic:"Mechanism of a hypercyanotic (tet) spell",
+   stem:"What is happening during Zoe's spell?",
+   o:["Her ductus arteriosus has reopened.",
+      "Agitation increases right ventricular outflow obstruction and lowers systemic resistance, so more deoxygenated blood shunts right-to-left across the VSD.",
+      "She has aspirated.",
+      "Her left ventricle has failed."],
+   c:1,why:"In tetralogy of Fallot, pulmonary stenosis and a VSD let blood bypass the lungs. Crying increases infundibular spasm and oxygen demand and lowers systemic vascular resistance, so more blue blood crosses to the aorta. Less blood reaches the lungs, which is why the murmur gets softer. Hypoxia and acidosis then feed the hyperpnea, creating a spiral."},
+  {cat:"Prioritization & Safety",topic:"First action in a tet spell",
+   stem:"What is your first action?",
+   o:["Lay her flat and start chest compressions.",
+      "Hold her calmly in a knee-to-chest position and give oxygen.",
+      "Give a bottle to soothe her.",
+      "Take her to radiology for an echocardiogram."],
+   c:1,why:"The knee-chest (squatting) position raises systemic vascular resistance, which reduces right-to-left shunting and pushes more blood to the lungs. Calming her lowers oxygen demand, and oxygen helps. If the spell continues, the provider may order morphine, a fluid bolus, phenylephrine or propranolol."},
+  {cat:"Pharmacology",topic:"Morphine in a tet spell",
+   stem:"The spell persists and morphine is ordered. Why does it help?",
+   o:["It raises her oxygen saturation directly.",
+      "It calms her and slows the hyperpnea, which reduces oxygen demand and infundibular spasm and breaks the cycle.",
+      "It dilates the pulmonary valve permanently.",
+      "It's given only for pain from the blood draw."],
+   c:1,why:"Morphine reduces agitation and the deep, rapid breathing that worsens the spell, and it may relax the infundibular spasm. Monitor for respiratory depression and hypotension. Phenylephrine raises systemic resistance, and beta blockers reduce infundibular contraction. Frequent spells are a reason to move up surgical repair."}
+ ]},
+{id:"310",unit:"Peds 3 North",name:"Sofia Lopez",age:"6 yr",sex:"F",dx:"Acute lymphoblastic leukemia, febrile neutropenia",
+ s:"Mom says she feels hot and \"isn't herself.\"",
+ b:"ALL diagnosed 2 weeks ago, day 14 of induction chemotherapy. Implanted port. Weight 20 kg.",
+ a:"Tired, flushed, chills. Port site clean. A few bruises on her shins. No mouth sores.",
+ r:"CBC just resulted. Mom asks if she can check her temperature rectally to be more accurate.",
+ mon:[["HR","138","sinus tach","hr"],["BP","94/56","mmHg","bp"],["SpO₂","98%","room air","spo2"],["RR","26","/min","rr"],["TEMP","38.6","°C oral","temp"]],
+ labs:[["WBC","1.2 ×10³/µL","lo"],["Segmented neutrophils","10%","lo"],["Bands","2%",""],["Hemoglobin","8.6 g/dL","lo"],["Platelets","34 ×10³/µL","lo"]],
+ meds:["Cefepime 50 mg/kg IV q8h (ordered)","Blood cultures from port and peripheral site","Acetaminophen 15 mg/kg PO PRN","Chemotherapy per protocol"],
+ qs:[
+  {cat:"Pathophysiology",topic:"Calculating the absolute neutrophil count",
+   stem:"WBC 1,200/µL with 10% segs and 2% bands. What is her ANC?",
+   o:["1,200/µL", "144/µL", "120/µL", "1,440/µL"],
+   c:1,why:"ANC = WBC × (segs + bands) ÷ 100 = 1,200 × 0.12 = 144/µL. An ANC below 500 is severe neutropenia, which carries a high risk of serious infection. Fever may be the only sign, because she can't mount a normal inflammatory response such as pus or redness."},
+  {cat:"Prioritization & Safety",topic:"Antibiotics within 60 minutes for febrile neutropenia",
+   stem:"What is the priority for her fever?",
+   o:["Give acetaminophen and recheck her temperature in 4 hours.",
+      "Draw blood cultures and start the IV broad-spectrum antibiotic within 60 minutes of the fever.",
+      "Wait for culture results before starting antibiotics.",
+      "Start antibiotics in the morning when the oncologist rounds."],
+   c:1,why:"Febrile neutropenia is an oncologic emergency; bacteria can progress to sepsis within hours. Cultures are drawn from every port lumen and often a peripheral site, then a broad-spectrum antibiotic is started within 60 minutes. Delays increase mortality."},
+  {cat:"Prioritization & Safety",topic:"Neutropenic and thrombocytopenic precautions",
+   stem:"Mom asks to take a rectal temperature. What do you tell her?",
+   o:["\"Yes, rectal temperatures are most accurate.\"",
+      "\"No rectal temperatures or suppositories; they can injure the lining and let bacteria into her blood, and her low platelets raise the bleeding risk.\"",
+      "\"Rectal is fine as long as you use lubricant.\"",
+      "\"Only take her temperature if she has chills.\""],
+   c:1,why:"With severe neutropenia and a platelet count of 34,000, rectal temperatures, suppositories and enemas can cause mucosal tears, bleeding and bacterial translocation. Use oral or axillary temperatures. Strict hand hygiene, avoiding sick contacts, and a soft toothbrush are also part of her precautions."}
+ ]}
+];
+
+// Spread correct answers across A–D with a fixed, repeatable shuffle per question.
+CASES.forEach((c,ci)=>c.qs.forEach((q,qi)=>{
+  let a=(ci*97+qi*31+7)>>>0;const rnd=()=>{a=(a+0x6D2B79F5)>>>0;let t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;return((t^(t>>>14))>>>0)/4294967296};
+  const idx=[0,1,2,3];for(let i=3;i>0;i--){const j=Math.floor(rnd()*(i+1));[idx[i],idx[j]]=[idx[j],idx[i]]}
+  q.o=idx.map(i=>q.o[i]);q.c=idx.indexOf(q.c);
+}));
+
+const KEY="peds-shift-v1";
+const CATS=["Pathophysiology","Pharmacology","Prioritization & Safety"];
+let state={cur:0,ans:{},name:"",view:"case"};
+function load(){try{const s=JSON.parse(localStorage.getItem(KEY)||"null");if(s&&s.ans)state=Object.assign(state,s)}catch(e){}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
+
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const answers=c=>state.ans[c.id]||[];
+const isDone=c=>answers(c).length===c.qs.length;
+const caseScore=c=>answers(c).reduce((n,a,i)=>n+(a===c.qs[i].c?1:0),0);
+function stability(c){let s=55;answers(c).forEach((a,i)=>{s+=a===c.qs[i].c?15:-15});return Math.max(10,Math.min(100,s))}
+function stabTone(s){return s>=85?"ok":s>=55?"warn":"crit"}
+function totals(){let seen=0,score=0,answered=0;CASES.forEach(c=>{if(isDone(c))seen++;score+=caseScore(c);answered+=answers(c).length});return{seen,score,answered}}
+function clockFor(n){const m=19*60+Math.round(n*72);const h=Math.floor(m/60)%24,mm=m%60;return String(h).padStart(2,"0")+":"+String(mm).padStart(2,"0")}
+
+function renderHud(){const t=totals();$("#clock").textContent=clockFor(t.answered/3);$("#seen").textContent=t.seen+"/10";$("#score").textContent=t.score+"/30";
+  $("#reportBtn").disabled=t.seen<CASES.length;}
+
+function renderRooms(){
+  $("#rooms").innerHTML=CASES.map((c,i)=>{
+    const a=answers(c);let cls="dot";if(isDone(c))cls+=" s"+caseScore(c);else if(a.length)cls+=" prog";
+    const st=isDone(c)?caseScore(c)+"/3":a.length?"in progress":"not seen";
+    return `<button class="room" data-i="${i}" aria-current="${state.view==="case"&&state.cur===i}" aria-label="Room ${c.id}, ${esc(c.name)}, ${st}">
+      <span class="num">${c.id}</span><span class="who"><b>${esc(c.name)}</b><span>${esc(c.dx.split("(")[0].split(",")[0])}</span></span><span class="${cls}" title="${st}"></span></button>`}).join("");
+  document.querySelectorAll(".room").forEach(b=>b.onclick=()=>{state.cur=+b.dataset.i;state.view="case";save();render();window.scrollTo({top:0,behavior:"smooth"})});
+}
+
+function renderCase(){
+  const c=CASES[state.cur],a=answers(c),s=stability(c),tone=stabTone(s);
+  const labs=c.labs.map(l=>`<tr class="${l[2]?"flag "+l[2]:""}"><td>${esc(l[0])}</td><td>${esc(l[1])}</td></tr>`).join("");
+  let qhtml="";
+  c.qs.forEach((q,qi)=>{
+    if(qi>a.length)return;
+    const chosen=a[qi],answered=chosen!==undefined;
+    const opts=q.o.map((t,oi)=>{let cls="opt";if(answered){if(oi===q.c)cls+=" right";else if(oi===chosen)cls+=" wrong";else cls+=" dim"}
+      return `<button class="${cls}" data-q="${qi}" data-o="${oi}" ${answered?"disabled":""}><span class="k">${"ABCD"[oi]}</span><span>${esc(t)}</span></button>`}).join("");
+    let why="";
+    if(answered){const ok=chosen===q.c;
+      why=`<div class="why"><p class="verdict ${ok?"ok":"bad"}">${ok?"Correct. Patient stability improves.":"Not the best choice. The correct answer is "+"ABCD"[q.c]+"."}</p><p>${esc(q.why)}</p></div>`}
+    qhtml+=`<section class="q ${answered?"done-q":""}" aria-label="Decision ${qi+1}">
+      <div class="meta"><span class="tag">${esc(q.cat)}</span><span class="step">Decision ${qi+1} of 3</span><span class="time">${clockFor(state.cur+qi/3)}</span></div>
+      <p class="stem">${esc(q.stem)}</p><div class="opts">${opts}</div>${why}</section>`;
+  });
+  let outcome="";
+  if(isDone(c)){
+    const sc=caseScore(c);
+    const txt=sc===3?["Stable at handoff","Your decisions kept "+c.name.split(" ")[0]+" safe through the night. Day shift receives a clean handoff."]:
+      sc===2?["Guarded","One decision slowed recovery, but the patient is safe at 0700. Review the rationale you missed."]:
+      ["Deteriorating","The rapid response team was called overnight. Review each rationale before your next shift."];
+    const t=sc===3?"ok":sc===2?"warn":"crit";
+    const next=CASES.findIndex((x,i)=>i>state.cur&&!isDone(x)),anyNext=next>=0?next:CASES.findIndex(x=>!isDone(x));
+    outcome=`<div class="outcome ${t}"><h3>${txt[0]} · ${sc}/3</h3><p>${txt[1]}</p></div>
+      <div class="actions">${anyNext>=0?`<button class="btn primary" id="nextBtn" data-n="${anyNext}">Go to Room ${CASES[anyNext].id}</button>`:`<button class="btn primary" id="toReport">See end-of-shift report</button>`}
+      <button class="btn" id="redoBtn">Redo this patient</button></div>`;
+  }
+  $("#chart").innerHTML=`
+   <div class="pt-head"><span class="rm">${esc(c.unit.toUpperCase())} · ROOM ${c.id}</span><h2>${esc(c.name)}, ${c.age} ${c.sex}</h2><span class="dx">${esc(c.dx)}</span></div>
+   <div class="monitor" role="group" aria-label="Bedside monitor">${c.mon.map(m=>`<div class="vital v-${m[3]==="temp"?"t":m[3]}"><label>${esc(m[0])}</label><b>${esc(m[1])}</b><small>${esc(m[2])}</small></div>`).join("")}
+   </div>
+   <div class="box stab"><h3 style="margin:0">Patient stability</h3><div class="bar" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${s}" aria-label="Patient stability"><div class="fill" style="width:${s}%;background:var(--${tone==="ok"?"ok":tone==="warn"?"lamp":"crit"})"></div></div><span class="lbl">${s}</span>
+     <span class="pill ${a.length?tone:"mute"}">${!a.length?"Awaiting assessment":tone==="ok"?"Improving":tone==="warn"?"Watch closely":"Declining"}</span></div>
+   <div class="grid2">
+     <div class="box"><h3>SBAR handoff from evening shift</h3><dl class="sbar">
+       <dt>S</dt><dd>${esc(c.s)}</dd><dt>B</dt><dd>${esc(c.b)}</dd><dt>A</dt><dd>${esc(c.a)}</dd><dt>R</dt><dd>${esc(c.r)}</dd></dl></div>
+     <div class="box"><h3>Labs &amp; results</h3><table class="labs">${labs}</table><h3 style="margin-top:14px">Active orders</h3><ul class="meds">${c.meds.map(m=>`<li>${esc(m)}</li>`).join("")}</ul></div>
+   </div>
+   ${qhtml}${outcome}`;
+  document.querySelectorAll(".opt:not(:disabled)").forEach(b=>b.onclick=()=>{
+    const qi=+b.dataset.q,oi=+b.dataset.o;const arr=state.ans[c.id]||(state.ans[c.id]=[]);if(arr.length!==qi)return;arr.push(oi);save();render();
+    const qs=document.querySelectorAll(".q");const last=isDone(c)?document.querySelector(".outcome"):qs[qs.length-1];if(last)last.scrollIntoView({behavior:"smooth",block:"center"})});
+  const nb=$("#nextBtn");if(nb)nb.onclick=()=>{state.cur=+nb.dataset.n;save();render();window.scrollTo({top:0,behavior:"smooth"})};
+  const tr=$("#toReport");if(tr)tr.onclick=()=>{state.view="report";save();render();window.scrollTo({top:0})};
+  const rd=$("#redoBtn");if(rd)rd.onclick=()=>{delete state.ans[c.id];save();render()};
+}
+
+function reportText(){
+  const t=totals();const lines=[];
+  lines.push("CLINICAL ROUNDS: THE PEDS SHIFT — End-of-shift report");
+  lines.push("Student: "+(state.name||"(name not entered)"));
+  lines.push("Total: "+t.score+"/30 ("+Math.round(t.score/30*100)+"%)");
+  CATS.forEach(cat=>{let n=0,d=0;CASES.forEach(c=>c.qs.forEach((q,i)=>{if(q.cat===cat){d++;if(answers(c)[i]===q.c)n++}}));lines.push(cat+": "+n+"/"+d)});
+  lines.push("");
+  CASES.forEach(c=>lines.push("Room "+c.id+" "+c.name+" ("+c.dx+"): "+caseScore(c)+"/3"));
+  const miss=[];CASES.forEach(c=>c.qs.forEach((q,i)=>{if(answers(c)[i]!==q.c)miss.push("Rm "+c.id+": "+q.topic)}));
+  lines.push("");lines.push("Topics to review:");lines.push(miss.length?miss.map(m=>"- "+m).join("\n"):"- None. Full marks.");
+  return lines.join("\n");
+}
+
+function renderReport(){
+  const t=totals();const pct=Math.round(t.score/30*100);
+  const cats=CATS.map(cat=>{let n=0,d=0;CASES.forEach(c=>c.qs.forEach((q,i)=>{if(q.cat===cat){d++;if(answers(c)[i]===q.c)n++}}));
+    return `<div class="box cat"><h3>${esc(cat)}</h3><b>${n}/${d}</b><span>${Math.round(n/d*100)}% correct</span></div>`}).join("");
+  const rows=CASES.map(c=>{const sc=caseScore(c),tone=sc===3?"ok":sc===2?"warn":"crit",lab=sc===3?"Stable":sc===2?"Guarded":"Deteriorating";
+    return `<tr><td class="n">${c.id}</td><td>${esc(c.name)}</td><td>${esc(c.dx)}</td><td class="n">${sc}/3</td><td><span class="pill ${tone}">${lab}</span></td></tr>`}).join("");
+  const miss=[];CASES.forEach(c=>c.qs.forEach((q,i)=>{if(answers(c)[i]!==q.c)miss.push(`<li><b>Room ${c.id}:</b> ${esc(q.topic)}</li>`)}));
+  $("#chart").innerHTML=`<section class="report" style="display:flex;flex-direction:column;gap:16px">
+    <div><h2>End-of-shift report</h2><p class="sub">07:00 · ${t.score}/30 decisions correct (${pct}%)</p></div>
+    <div class="cats">${cats}</div>
+    <div class="box"><h3>Patients at handoff</h3><div class="tbl-wrap"><table class="rtbl"><thead><tr><th>Room</th><th>Patient</th><th>Diagnosis</th><th>Score</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div></div>
+    <div class="box"><h3>Topics to review</h3>${miss.length?`<ul class="review">${miss.join("")}</ul>`:"<p>None. Every decision was correct.</p>"}</div>
+    <div class="box" style="display:flex;flex-direction:column;gap:10px"><h3>Submit to Canvas</h3>
+      <div class="field"><label for="stuName">Your name</label><input id="stuName" value="${esc(state.name)}" autocomplete="name"></div>
+      <textarea class="copytext" id="repText" readonly aria-label="Report text">${esc(reportText())}</textarea>
+      <div class="actions"><button class="btn primary" id="copyBtn">Copy report</button><button class="btn" id="backBtn">Back to the unit</button><span class="toast" id="toast" aria-live="polite"></span></div>
+      <p class="note">Paste the copied report into the Canvas assignment or discussion your instructor set up.</p></div>
+    <p class="note">Educational simulation for BSN students. Rationales reflect common evidence-based practice; always follow current institutional protocols and provider orders.</p>
+  </section>`;
+  $("#stuName").oninput=e=>{state.name=e.target.value;save();$("#repText").value=reportText()};
+  $("#copyBtn").onclick=()=>{const ta=$("#repText");const txt=ta.value;
+    const done=()=>{$("#toast").textContent="Copied"};
+    try{navigator.clipboard.writeText(txt).then(done,()=>{ta.focus();ta.select();$("#toast").textContent="Selected. Press Ctrl+C or ⌘C to copy."})}catch(e){ta.focus();ta.select();$("#toast").textContent="Selected. Press Ctrl+C or ⌘C to copy."}};
+  $("#backBtn").onclick=()=>{state.view="case";save();render()};
+}
+
+function render(){renderHud();renderRooms();if(state.view==="report"&&totals().seen===CASES.length)renderReport();else{state.view="case";renderCase()}}
+
+$("#reportBtn").onclick=()=>{state.view="report";save();render();window.scrollTo({top:0})};
+$("#resetBtn").onclick=()=>{const b=$("#resetBtn");if(b.dataset.armed){state={cur:0,ans:{},name:state.name,view:"case"};save();b.textContent="Start a new shift";delete b.dataset.armed;render()}else{b.dataset.armed="1";b.textContent="Tap again to clear progress";setTimeout(()=>{if(b.dataset.armed){delete b.dataset.armed;b.textContent="Start a new shift"}},4000)}};
+
+function start(data){if(data&&data.ans)state=Object.assign(state,data);else load();render()}
+window.claude?.hot?.snapshot?.(()=>state);
+window.claude?.hot?.ready?window.claude.hot.ready(start):start(window.claude?.hot?.data??{});
+</script>
+
+</body></html>
